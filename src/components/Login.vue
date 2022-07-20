@@ -11,7 +11,7 @@
     })
 
     const onSubmit = () => {
-        SocketService.join(form.name);
+        SocketService.join(form.name, form.roomId);
         route.push('/index')
         console.log(route);
     }
@@ -19,19 +19,31 @@
 </script>
 
 <template>
-    <el-form :model="form" label-width="120px">
-    <el-form-item label="Room id">
-      <el-input v-model="form.roomId" />
-    </el-form-item>
-    <el-form-item label="User name">
-      <el-input v-model="form.name" />
-    </el-form-item>
-    <el-form-item>
-      <el-button type="primary" @click="onSubmit">Create</el-button>
-    </el-form-item>
-  </el-form>
+  <div class="login">
+      <div class="login_title"><h1>Login</h1></div>
+      <el-form :model="form" label-width="120px">
+      <el-form-item label="Room id">
+        <el-input v-model="form.roomId" />
+      </el-form-item>
+      <el-form-item label="User name">
+        <el-input v-model="form.name" />
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="onSubmit" v-bind:disabled="(!form.roomId || !form.name) ? true : false">Create</el-button>
+      </el-form-item>
+    </el-form>
+  </div>
 </template>
 
 <style>
-
+.login {
+  display: flex;
+  flex-flow: column;
+  border: solid;
+  border-radius: 20px;
+  padding: 30px;
+}
+.login_title {
+  margin: 20px;
+}
 </style>
