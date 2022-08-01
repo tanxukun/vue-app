@@ -28,6 +28,12 @@
       <el-form-item label="User name">
         <el-input v-model="form.name" />
       </el-form-item>
+      <el-form-item label="Resources">
+        <el-radio-group v-model="form.connect">
+          <el-radio label="Sponsor" />
+          <el-radio label="Venue" />
+        </el-radio-group>
+      </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="onSubmit" v-bind:disabled="(!form.roomId || !form.name) ? true : false">Create</el-button>
       </el-form-item>

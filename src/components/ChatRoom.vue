@@ -5,10 +5,7 @@
         <el-button @click="openMicphone">{{audioSwitch ? 'close micphone' : 'open micphone'}}</el-button>
     </div>
     <div class="list">
-        <div class="user" v-for="user in data.userList">
-            <video :ref="setVideoRef" :data-id="user.userId" autoplay width="425" height="240"></video>
-            <span>{{ user.userName }}</span>
-        </div>
+        <MediaItem v-for="user in data.userList" :user="user"></MediaItem>
     </div>
 </div>
 </template>
@@ -16,6 +13,9 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive, getCurrentInstance } from 'vue';
 import SocketService from '../service/SocketService';
+import MediaItem from './MediaItem.vue';
+import User from '../entity/User';
+import MediaService from '../service/MediaService';
 
 const { proxy } = getCurrentInstance();
 const videoRefs = ref(new Map());
@@ -23,22 +23,15 @@ const data = reactive({
     userList: []
 })
 
-// let [videoSwitch, audioSwitch] = [false, false];
 const videoSwitch = ref(false);
 const audioSwitch = ref(false);
-
-const setVideoRef = (el) => {
-    if(el) {
-        videoRefs.value.set(el.dataset['id'], el);
-    }
-}
 
 const openCamera = async () => {
     if(videoSwitch.value) {
         videoSwitch.value = false;
         SocketService.stopStream('video');
-        const video = getVideo(SocketService.userId);
-        const stream = video.srcObject;
+        const video = MediaService.getVideo(SocketService.userId);
+        const stream = video.srcObject as MediaStream;
         const track = stream.getVideoTracks()?.[0];
         track?.stop();
         stream.removeTrack(track);
@@ -67,7 +60,7 @@ const openMicphone = async () => {
 }
 
 const render = (stream: MediaStream) => {
-    const video = getVideo(SocketService.userId);
+    const video = MediaService.getVideo(SocketService.userId);
     if(video.srcObject) {
         const tracks = stream.getTracks();
         const srcObject = video.srcObject as MediaStream;
@@ -80,10 +73,6 @@ const render = (stream: MediaStream) => {
     } else {
         video.srcObject = stream;
     }
-}
-
-const getVideo = (userId: string) => {
-    return videoRefs.value.get(userId);
 }
 
 onMounted(async () => {

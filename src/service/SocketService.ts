@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { v4 as uuidv4 } from 'uuid';
+import User from '../entity/User';
 
 export default class SocketService {
     static userId: string;
@@ -8,13 +9,10 @@ export default class SocketService {
     static pcMap: Map<string, RTCPeerConnection> = new Map()
     static userListCallbacks: Array<Function> = []
     static streamCallbacks: Array<Function> = []
-    static userList: Array<{userId: string, userName: string}> = []
+    static userList: User[] = []
+    static localStream: MediaStream = new MediaStream()
 
-    constructor (config) {
-
-    }
-
-    static listenSocket () {
+    static listenSocket (): void {
         this.socket.on('pc message', (message) => {
             console.log('receive peer connection message', message);
             const { userId, data } = message;
@@ -38,7 +36,10 @@ export default class SocketService {
         this.socket.on('joined', () => {
             this.userList.forEach((user) => {
                 if(!this.pcMap.has(user.userId)) {
-                    this.createPeerConnection(user.userId);
+                    this.createPeerConnection(user.userId, true);
+                }
+                if(user.streams.length) {
+                    this.socket.emit('pull request', user)
                 }
             })
             this.userListCallbacks.forEach(callback => {
@@ -46,16 +47,19 @@ export default class SocketService {
             })
         })
         this.socket.on('stream on', ({userId, device}) => {
-            this.updateStream({userId, type: 'remove', device, track: null})
-            console.log('receive track off', userId, device);
+            // this.updateStream({userId, type: 'add', device, track: null})
+            console.log('receive stream on', userId, device);
         })
         this.socket.on('stream off', ({userId, device}) => {
             this.updateStream({userId, type: 'remove', device, track: null})
-            console.log('receive track off', userId, device);
+            console.log('receive stream off', userId, device);
+        })
+        this.socket.on('pull request', ({userId}) => {
+            this.pushStreamForUser(userId);
         })
     }
 
-    static listenPeer (userId: string, pc: RTCPeerConnection) {
+    static listenPeer (userId: string, pc: RTCPeerConnection): void {
         pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
             if(event.candidate) {
                 console.log('receive icecandidate', event);
@@ -74,16 +78,25 @@ export default class SocketService {
         }
     }
 
-    static join (userName: string, roomId: string) {
+    static join (userName: string, roomId: string): void {
         this.userId = uuidv4();
         this.roomId = roomId;
         this.socket = io('http://localhost:9000', {query: {userId: this.userId, userName, roomId}});
         this.listenSocket();
     }
 
-    static pushStream (stream: MediaStream, device: string) {
+    static pushStreamForUser (userId: string): void {
+        const pc = this.getPeerConnection(userId);
+        const tracks = this.localStream.getTracks();
+        tracks.forEach(track => {
+            pc.addTrack(track);
+        })
+        // this.createOffer(pc);
+    }
+
+    static pushStream (stream: MediaStream, device: string): void {
         const tracks = stream.getTracks() || [];
-        const track = tracks.find(item => item.kind === (device as string));
+        const track = tracks.find(item => item.kind === device);
         if(!track) {
             console.log('push stream failed, no track', stream);
             return;
@@ -95,10 +108,16 @@ export default class SocketService {
                 this.createOffer(pc);
             }
         })
-        this.socket.emit('stream on', {userId: this.userId, device})
+        this.socket.emit('stream on', {userId: this.userId, device, track})
+        const localTracks = this.localStream.getTracks();
+        const localTrack = localTracks.find(item => item.kind === device)
+        if(localTrack) {
+            this.localStream.removeTrack(localTrack);
+        }
+        this.localStream.addTrack(track);
     }
 
-    static stopStream (device: string) {
+    static stopStream (device: string): void {
         this.userList.forEach(user => {
             if(user.userId != this.userId) {
                 const pc = this.getPeerConnection(user.userId);
@@ -110,17 +129,22 @@ export default class SocketService {
             }
         })
         this.socket.emit('stream off', {userId: this.userId, device})
+        const localTrack = this.localStream.getTracks().find(item => item.kind === device);
+        if(localTrack) {
+            this.localStream.removeTrack(localTrack);
+        }
     }
 
-    static async createPeerConnection (userId: string) {
+    static async createPeerConnection (userId: string, needCreateOffer: boolean = false): Promise<void> {
         if(userId != this.userId && !this.pcMap.has(userId)) {
             const peer = new RTCPeerConnection({iceServers: [{urls: 'stun:sutn.l.goole.com:19302'}]});
             this.listenPeer(userId, peer);
             this.pcMap.set(userId, peer);
+            needCreateOffer && this.createOffer(peer);
         }
     }
 
-    static async createOffer (pc: RTCPeerConnection) {
+    static async createOffer (pc: RTCPeerConnection): Promise<void> {
         // const peer = this.getPeerConnection(userId);
         const description = await pc.createOffer();
         try {
@@ -132,7 +156,7 @@ export default class SocketService {
         console.log(pc.localDescription);
     }
 
-    static async createAnswer (userId: string, offerDescription: RTCSessionDescription) {
+    static async createAnswer (userId: string, offerDescription: RTCSessionDescription): Promise<void> {
         const pc = this.getPeerConnection(userId);
         pc.setRemoteDescription(offerDescription);
         const answerDescription = await pc.createAnswer();
@@ -140,42 +164,44 @@ export default class SocketService {
         this.socket.emit('pc message', {userId: this.userId, data: pc.localDescription});
     }
 
-    static async remoteAnswer (userId: string, answerDescription: RTCSessionDescription) {
+    static async remoteAnswer (userId: string, answerDescription: RTCSessionDescription): Promise<void> {
         const pc = this.getPeerConnection(userId);
         await pc.setRemoteDescription(answerDescription);
     }
 
-    static getPeerConnection (userId: string) {
+    static getPeerConnection (userId: string): RTCPeerConnection {
         if(!this.pcMap.has(userId)) {
             this.createPeerConnection(userId);
         }
         return this.pcMap.get(userId);
     }
 
-    static addIceCandidate (userId: string, candidate) {
+    static addIceCandidate (userId: string, candidate): void {
         const pc = this.getPeerConnection(userId);
-        pc.addIceCandidate(candidate);
+        pc.addIceCandidate(new RTCIceCandidate(candidate));
     }
 
-    static async getUserList () {
+    static async getUserList (): Promise<User[]> {
         const response = await fetch(`http://127.0.0.1:9000/getUserList?roomId=${this.roomId}`);
         const content = await response.json();
-        this.userList = content;
-        return content;
-        console.log(content);
+        const userList: User[] = content.map(item => {
+            return new User(item);
+        })
+        this.userList = userList;
+        return userList;
     }
 
-    static onUserListUpdate (callback) {
+    static onUserListUpdate (callback): void {
         this.userListCallbacks.push(callback);
     }
 
-    static updateStream (...args) {
+    static updateStream (...args): void {
         this.streamCallbacks.forEach(callback => {
             callback(...args);
         })
     }
 
-    static onStreamUpdate (callback) {
+    static onStreamUpdate (callback): void {
         this.streamCallbacks.push(callback);
     }
 }
