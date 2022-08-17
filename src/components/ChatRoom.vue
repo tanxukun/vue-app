@@ -3,10 +3,14 @@
     <div class="btns">
         <el-button @click="openCamera">{{videoSwitch ? 'close camera' : 'open camera'}}</el-button>
         <el-button @click="openMicphone">{{audioSwitch ? 'close micphone' : 'open micphone'}}</el-button>
+        <el-button @click="openScreenShare">{{screenSwitch ? 'close screen share' : 'open screen share'}}</el-button>
+        <el-button @click="showScreen">{{screenDisplay ? 'hide screen' : 'show screen'}}</el-button>
+        <el-button @click="quit">quit</el-button>
     </div>
     <div class="list">
         <MediaItem v-for="user in data.userList" :user="user"></MediaItem>
     </div>
+    <SceenItem :isShow="(screenDisplay)"></SceenItem>
 </div>
 </template>
 
@@ -16,6 +20,10 @@ import SocketService from '../service/SocketService';
 import MediaItem from './MediaItem.vue';
 import User from '../entity/User';
 import MediaService from '../service/MediaService';
+import SceenItem from './SceenItem.vue';
+import ConnectService from '../service/ConnectService';
+import { useRouter } from 'vue-router';
+const route = useRouter();
 
 const { proxy } = getCurrentInstance();
 const videoRefs = ref(new Map());
@@ -25,6 +33,8 @@ const data = reactive({
 
 const videoSwitch = ref(false);
 const audioSwitch = ref(false);
+const screenSwitch = ref(false);
+const screenDisplay = ref<boolean>(false);
 
 const openCamera = async () => {
     if(videoSwitch.value) {
@@ -59,6 +69,21 @@ const openMicphone = async () => {
     }
 }
 
+const openScreenShare = async () => {
+    if(screenSwitch.value) {
+        screenSwitch.value = false;
+        SocketService.stopStream('screen');
+    } else {
+        const stream = await navigator.mediaDevices.getDisplayMedia();
+        screenSwitch.value = true;
+        SocketService.pushStream(stream, 'screen');
+    }
+}
+
+const showScreen = () => {
+    screenDisplay.value = !screenDisplay.value;
+}
+
 const render = (stream: MediaStream) => {
     const video = MediaService.getVideo(SocketService.userId);
     if(video.srcObject) {
@@ -75,6 +100,11 @@ const render = (stream: MediaStream) => {
     }
 }
 
+const quit = () => {
+    ConnectService.quit();
+    route.push('/');
+}
+
 onMounted(async () => {
     const list = await SocketService.getUserList();
     data.userList = list;
@@ -83,26 +113,26 @@ onMounted(async () => {
         data.userList = list;
         console.log('user list:', data.userList);
     });
-    SocketService.onStreamUpdate(({userId, type, device, track}) => {
-        const video = videoRefs.value.get(userId);
-        console.log('receive stream', type, userId, device, video);
-        if(video) {
-            if(!video.srcObject) {
-                video.srcObject = new MediaStream();
-            }
-            if(type == 'add') {
-                video.srcObject.addTrack(track);
-            } else {
-                const tracks = video.srcObject.getTracks();
-                const oldTrack = tracks.find(item => item.kind === device);
-                oldTrack?.stop();
-                video.srcObject.removeTrack(oldTrack);
-                if(!video.srcObject?.getTracks().length) {
-                    video.srcObject = null;
-                }
-            }
-        }
-    })
+    // SocketService.onStreamUpdate(({userId, type, device, track}) => {
+    //     const video = videoRefs.value.get(userId);
+    //     console.log('receive stream', type, userId, device, video);
+    //     if(video) {
+    //         if(!video.srcObject) {
+    //             video.srcObject = new MediaStream();
+    //         }
+    //         if(type == 'add') {
+    //             video.srcObject.addTrack(track);
+    //         } else {
+    //             const tracks = video.srcObject.getTracks();
+    //             const oldTrack = tracks.find(item => item.kind === device);
+    //             oldTrack?.stop();
+    //             video.srcObject.removeTrack(oldTrack);
+    //             if(!video.srcObject?.getTracks().length) {
+    //                 video.srcObject = null;
+    //             }
+    //         }
+    //     }
+    // })
     console.log('proxy:', videoRefs.value);
 })
 </script>

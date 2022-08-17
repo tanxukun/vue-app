@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import { v4 as uuidv4 } from 'uuid';
 import User from '../entity/User';
+import MediaService from './MediaService';
 
 export default class SocketService {
     static userId: string;
@@ -46,9 +47,10 @@ export default class SocketService {
                 callback();
             })
         })
-        this.socket.on('stream on', ({userId, device}) => {
-            // this.updateStream({userId, type: 'add', device, track: null})
-            console.log('receive stream on', userId, device);
+        this.socket.on('stream on', ({userId, device, trackId}) => {
+            // MediaService.setTrackId(trackId, userId, device);
+            // this.updateStream({userId, type: 'set', device, trackId})
+            console.log('receive stream on', userId, device, trackId);
         })
         this.socket.on('stream off', ({userId, device}) => {
             this.updateStream({userId, type: 'remove', device, track: null})
@@ -96,11 +98,12 @@ export default class SocketService {
 
     static pushStream (stream: MediaStream, device: string): void {
         const tracks = stream.getTracks() || [];
-        const track = tracks.find(item => item.kind === device);
+        const track = tracks.find(item => item.kind === MediaService.getKindByDevice(device));
         if(!track) {
             console.log('push stream failed, no track', stream);
             return;
         }
+        this.socket.emit('stream on', {userId: this.userId, device, trackId: track.id})
         this.userList.forEach(user => {
             if(user.userId != this.userId) {
                 const pc = this.getPeerConnection(user.userId);
@@ -108,9 +111,8 @@ export default class SocketService {
                 this.createOffer(pc);
             }
         })
-        this.socket.emit('stream on', {userId: this.userId, device, track})
         const localTracks = this.localStream.getTracks();
-        const localTrack = localTracks.find(item => item.kind === device)
+        const localTrack = localTracks.find(item => item.kind === MediaService.getKindByDevice(device))
         if(localTrack) {
             this.localStream.removeTrack(localTrack);
         }
@@ -122,14 +124,14 @@ export default class SocketService {
             if(user.userId != this.userId) {
                 const pc = this.getPeerConnection(user.userId);
                 const senders = pc.getSenders();
-                const sender = senders.find(item => item.track?.kind === device);
+                const sender = senders.find(item => item.track?.kind === MediaService.getKindByDevice(device));
                 if(sender) {
                     pc.removeTrack(sender);
                 }
             }
         })
         this.socket.emit('stream off', {userId: this.userId, device})
-        const localTrack = this.localStream.getTracks().find(item => item.kind === device);
+        const localTrack = this.localStream.getTracks().find(item => item.kind === MediaService.getKindByDevice(device));
         if(localTrack) {
             this.localStream.removeTrack(localTrack);
         }

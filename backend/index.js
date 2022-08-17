@@ -48,14 +48,14 @@ io.on('connection', (socket) => {
         user.streams = [...set];
         socket.broadcast.to(roomId).emit('stream off', {userId, device})
     })
-    socket.on('stream on', ({userId, device, track}) => {
+    socket.on('stream on', ({userId, device, trackId}) => {
         console.log('receive stream on', userId, device);
         const roomUsers = rooms.get(roomId);
         const user = roomUsers.find(item => item.userId === userId);
         const set = new Set(user.streams);
         set.add(device);
         user.streams = [...set];
-        socket.broadcast.to(roomId).emit('stream on', {userId, device, track})
+        socket.broadcast.to(roomId).emit('stream on', {userId, device, trackId})
     })
     socket.on('pull request', ({clientId}) => {
         socket.broadcast.to(clientId).emit('pull request', {userId})

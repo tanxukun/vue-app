@@ -8,6 +8,7 @@
     const form = reactive({
         name: '',
         roomId: '',
+        connect: 'MESH'
     })
 
     const onSubmit = () => {
@@ -28,10 +29,10 @@
       <el-form-item label="User name">
         <el-input v-model="form.name" />
       </el-form-item>
-      <el-form-item label="Resources">
+      <el-form-item label="Connect  ">
         <el-radio-group v-model="form.connect">
-          <el-radio label="Sponsor" />
-          <el-radio label="Venue" />
+          <el-radio label="MESH" v-model="form.connect" />
+          <el-radio label="SFU" v-model="form.connect" />
         </el-radio-group>
       </el-form-item>
       <el-form-item>

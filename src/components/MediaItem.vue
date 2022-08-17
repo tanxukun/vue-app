@@ -33,6 +33,10 @@
             MediaService.setVideoRef(this.$props.user.userId, this.$refs.videoRef);
             SocketService.onStreamUpdate(({userId, type, device, track}) => {
                 if(userId === this.$props.user.userId) {
+                    const { device } = MediaService.getDeviceByTrackId(track.id);
+                    if(device === 'screen') {
+                        return;
+                    }
                     const video = this.$refs.videoRef
                     console.log('receive stream', type, userId, device, video);
                     if(video) {
