@@ -1,9 +1,13 @@
+import ConnectService from "./ConnectService";
 
 
 export default class PeerConnection {
     private peer: RTCPeerConnection;
     private fromUserId: string;
     private toUserId: string;
+    private connected: boolean = false;
+    private connecting: boolean = false;
+    private waitingTracks: Set<MediaStreamTrack> = new Set()
 
     constructor (from: string, to: string) {
         this.fromUserId = from;
@@ -21,7 +25,7 @@ export default class PeerConnection {
                     sdpMid: event.candidate.sdpMid,
                     sdpMLineIndex: event.candidate.sdpMLineIndex
                 }
-                // this.socket.emit('pc message', {userId: this.userId, data: {type: 'candidate', candidate: message}});
+                ConnectService.emitPeerMessage({type: 'candidate', candidate: message});
             }
         }
         this.peer.ontrack = (event: RTCTrackEvent) => {
@@ -31,25 +35,37 @@ export default class PeerConnection {
     }
 
     async createOffer (): Promise<void> {
+        if(this.connecting) {
+            return;
+        }
+        this.connecting = true;
         const description = await this.peer.createOffer();
         try {
             await this.peer.setLocalDescription(description);
         } catch(e) {
             console.error(e);
         }
-        // this.socket.emit('pc message', {userId: this.userId, data: pc.localDescription});
+        ConnectService.emitPeerMessage(this.peer.localDescription);
         console.log(this.peer.localDescription);
     }
 
-    async createAnswer (userId: string, offerDescription: RTCSessionDescription): Promise<void> {
+    async createAnswer (offerDescription: RTCSessionDescription): Promise<void> {
         this.peer.setRemoteDescription(offerDescription);
         const answerDescription = await this.peer.createAnswer();
         await this.peer.setLocalDescription(answerDescription);
-        // this.socket.emit('pc message', {userId: this.userId, data: pc.localDescription});
+        ConnectService.emitPeerMessage(this.peer.localDescription);
     }
 
-    async remoteAnswer (userId: string, answerDescription: RTCSessionDescription): Promise<void> {
+    async remoteAnswer (answerDescription: RTCSessionDescription): Promise<void> {
         await this.peer.setRemoteDescription(answerDescription);
+        this.connected = true;
+        this.connecting = false;
+        if(this.waitingTracks.size > 0) {
+            [...this.waitingTracks].forEach(track => {
+                this.peer.addTrack(track);
+            })
+            this.waitingTracks.clear();
+        }
     }
 
     close () {
@@ -58,5 +74,14 @@ export default class PeerConnection {
 
     handleEvent = () => {
 
+    }
+
+    pushStream (track: MediaStreamTrack) {
+        if(this.connected) {
+            this.peer.addTrack(track);
+        } else {
+            this.waitingTracks.add(track);
+            this.createOffer();
+        }
     }
 }

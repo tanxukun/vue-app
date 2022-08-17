@@ -9,10 +9,11 @@ export default class ConnectService {
     private static socket: Socket;
     private static userListCallbacks: Array<Function> = []
     private static streamCallbacks: Array<Function> = []
+    private static peerMessageCallbacks: Map<string, Function> = new Map();
     private static userList: User[] = []
 
     static listenSocket (): void {
-        this.socket.on('pc message', (message) => {
+        this.socket.on('peer message', (message) => {
             console.log('receive peer connection message', message);
             
         })
@@ -36,7 +37,7 @@ export default class ConnectService {
             console.log('receive stream off', userId, device);
         })
 
-        this.socket.on('pull request', ({userId}) => {
+        this.socket.on('pull request', ({userId, device, track}) => {
 
         })
     }
@@ -82,5 +83,9 @@ export default class ConnectService {
 
     static emitPushStream (device: string, trackId: string) {
         this.socket.emit('stream on', { userId: this.userId, device, trackId})
+    }
+
+    static emitPeerMessage (data) {
+        this.socket.emit('peer message', {userId: this.userId, data})
     }
 }

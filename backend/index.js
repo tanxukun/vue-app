@@ -49,7 +49,7 @@ io.on('connection', (socket) => {
         socket.broadcast.to(roomId).emit('stream off', {userId, device})
     })
     socket.on('stream on', ({userId, device, trackId}) => {
-        console.log('receive stream on', userId, device);
+        console.log('receive stream on', userId, device, trackId);
         const roomUsers = rooms.get(roomId);
         const user = roomUsers.find(item => item.userId === userId);
         const set = new Set(user.streams);
